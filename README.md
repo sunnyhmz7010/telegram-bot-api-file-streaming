@@ -29,7 +29,7 @@
 - 减少“完整下载完成后再返回”的阻塞流程和额外磁盘占用。
 - 默认关闭，通过 `--enable-file-streaming` 显式启用。
 - 不修改标准 Bot API 接口行为，理论上兼容官方已有接口。
-- Docker 镜像默认启用文件流式端点并监听 `8081`。
+- Docker 镜像通过 `TELEGRAM_FILE_STREAMING=1` 环境变量启用文件流式端点并监听 `8081`。
 - GitHub Actions 仅手动触发，且只构建 `linux/amd64` 镜像。
 
 ## ⚡ 快速开始
@@ -56,6 +56,12 @@ services:
     environment:
       - TELEGRAM_API_ID=<API_ID>
       - TELEGRAM_API_HASH=<API_HASH>
+      - TELEGRAM_FILE_STREAMING=1
+    volumes:
+      - telegram-bot-api-data:/var/lib/telegram-bot-api
+
+volumes:
+  telegram-bot-api-data:
 ```
 
 然后启动：
@@ -79,6 +85,8 @@ docker run -d \
   -p 8081:8081 \
   -e TELEGRAM_API_ID=<API_ID> \
   -e TELEGRAM_API_HASH=<API_HASH> \
+  -e TELEGRAM_FILE_STREAMING=1 \
+  -v telegram-bot-api-data:/var/lib/telegram-bot-api \
   ghcr.io/sunnyhmz7010/telegram-bot-api-file-streaming:latest
 ```
 
@@ -90,9 +98,14 @@ docker run -d \
 git clone https://github.com/sunnyhmz7010/telegram-bot-api-file-streaming.git
 cd telegram-bot-api-file-streaming
 docker build -t telegram-bot-api-file-streaming .
-docker run --rm -p 8081:8081 \
+docker run -d \
+  --name telegram-bot-api-file-streaming \
+  --restart unless-stopped \
+  -p 8081:8081 \
   -e TELEGRAM_API_ID=<API_ID> \
   -e TELEGRAM_API_HASH=<API_HASH> \
+  -e TELEGRAM_FILE_STREAMING=1 \
+  -v telegram-bot-api-data:/var/lib/telegram-bot-api \
   telegram-bot-api-file-streaming
 ```
 
@@ -101,6 +114,33 @@ docker run --rm -p 8081:8081 \
 首次源码编译耗时较长，普通环境可能需要 30 分钟以上。GitHub Actions 已配置为手动触发构建，避免无意义地占用 CI 时间。
 
 ## 📖 使用说明
+
+### ⚙️ 环境变量
+
+容器通过环境变量配置服务，入口脚本会将其转换为 `telegram-bot-api` 启动参数：
+
+| 环境变量 | 必填 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `TELEGRAM_API_ID` | 是 | - | Telegram 应用 `api_id`，可改为 `TELEGRAM_API_ID_FILE` 从文件读取 |
+| `TELEGRAM_API_HASH` | 是 | - | Telegram 应用 `api_hash`，可改为 `TELEGRAM_API_HASH_FILE` 从文件读取 |
+| `TELEGRAM_WORK_DIR` | 否 | `/var/lib/telegram-bot-api` | 工作目录，建议挂载卷持久化 |
+| `TELEGRAM_TEMP_DIR` | 否 | `/tmp/telegram-bot-api` | 临时目录 |
+| `TELEGRAM_HTTP_PORT` | 否 | `8081` | HTTP 监听端口 |
+| `TELEGRAM_FILE_STREAMING` | 否 | 关闭 | 设为 `1` 启用流式文件端点 |
+| `TELEGRAM_FILE_STREAM_CHUNK_SIZE` | 否 | `262144` | 单次读取和发送的最大字节数 |
+| `TELEGRAM_FILE_STREAM_MAX_CONNECTIONS` | 否 | `100` | 全局同时活动的流式响应数量上限 |
+| `TELEGRAM_FILE_STREAM_FIRST_BYTE_TIMEOUT` | 否 | `30` | 首个数据块发送前最长等待时间（秒） |
+| `TELEGRAM_FILE_STREAM_IDLE_TIMEOUT` | 否 | `60` | 两个数据块之间允许的最长停滞时间（秒） |
+| `TELEGRAM_FILE_STREAM_WRITE_HIGH_WATERMARK` | 否 | `1048576` | 每个连接单次进入受控写入队列的数据上限 |
+| `TELEGRAM_LOG_FILE` | 否 | - | 日志文件路径，默认输出到 stdout/stderr |
+| `TELEGRAM_FILTER` | 否 | - | 允许 `bot_user_id % modulo == remainder` 的机器人 |
+| `TELEGRAM_MAX_WEBHOOK_CONNECTIONS` | 否 | - | 每个机器人默认最大 webhook 连接数 |
+| `TELEGRAM_VERBOSITY` | 否 | - | 日志详细程度 |
+| `TELEGRAM_MAX_CONNECTIONS` | 否 | - | 最大打开文件描述符数量 |
+| `TELEGRAM_PROXY` | 否 | - | 出站 webhook 请求的 HTTP 代理，格式 `http://host:port` |
+| `TELEGRAM_HTTP_IP_ADDRESS` | 否 | - | HTTP 监听地址，IPv6 使用 `[::]` |
+
+`_FILE` 变体用于从 Docker Secret 等文件读取敏感值，如 `TELEGRAM_API_ID_FILE=/run/secrets/api_id`。
 
 ### ✨ 功能说明
 
@@ -549,6 +589,7 @@ telegram-bot-api-file-streaming/
 ├── td/                             # TDLib 源码
 ├── .github/workflows/docker.yml    # 手动触发的 amd64 Docker 镜像构建
 ├── Dockerfile                      # Alpine 多阶段构建镜像
+├── docker-entrypoint.sh            # 环境变量转启动参数的容器入口脚本
 ├── CMakeLists.txt                  # CMake 构建入口
 ├── LICENSE                         # Boost Software License 1.0
 └── SECURITY.md                     # 安全报告方式
