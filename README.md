@@ -57,11 +57,6 @@ services:
       - TELEGRAM_API_ID=<API_ID>
       - TELEGRAM_API_HASH=<API_HASH>
       - TELEGRAM_FILE_STREAMING=1
-    volumes:
-      - telegram-bot-api-data:/var/lib/telegram-bot-api
-
-volumes:
-  telegram-bot-api-data:
 ```
 
 然后启动：
@@ -86,7 +81,6 @@ docker run -d \
   -e TELEGRAM_API_ID=<API_ID> \
   -e TELEGRAM_API_HASH=<API_HASH> \
   -e TELEGRAM_FILE_STREAMING=1 \
-  -v telegram-bot-api-data:/var/lib/telegram-bot-api \
   ghcr.io/sunnyhmz7010/telegram-bot-api-file-streaming:latest
 ```
 
@@ -105,7 +99,6 @@ docker run -d \
   -e TELEGRAM_API_ID=<API_ID> \
   -e TELEGRAM_API_HASH=<API_HASH> \
   -e TELEGRAM_FILE_STREAMING=1 \
-  -v telegram-bot-api-data:/var/lib/telegram-bot-api \
   telegram-bot-api-file-streaming
 ```
 
