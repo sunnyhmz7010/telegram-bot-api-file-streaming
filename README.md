@@ -111,8 +111,6 @@ docker run -d \
 
 如果用 Docker Compose，把 `compose.yaml` 里的 `image: ghcr.io/...` 换成 `build: .`，然后 `docker compose up -d --build`。
 
-首次源码编译耗时较长，普通环境可能需要 30 分钟以上。GitHub Actions 已配置为手动触发构建，避免无意义地占用 CI 时间。
-
 ## 📖 使用说明
 
 ### ⚙️ 环境变量
