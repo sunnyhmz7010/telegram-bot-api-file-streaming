@@ -53,6 +53,7 @@ services:
     restart: unless-stopped
     ports:
       - "8081:8081"
+      # - "8082:8082"   # 统计端点（配合 TELEGRAM_STAT=1）
     environment:
       - TELEGRAM_API_ID=<API_ID>
       - TELEGRAM_API_HASH=<API_HASH>
@@ -83,6 +84,7 @@ docker run -d \
   --name telegram-bot-api-file-streaming \
   --restart unless-stopped \
   -p 8081:8081 \
+  # -p 8082:8082 \
   -e TELEGRAM_API_ID=<API_ID> \
   -e TELEGRAM_API_HASH=<API_HASH> \
   -e TELEGRAM_FILE_STREAMING=1 \
@@ -102,6 +104,7 @@ docker run -d \
   --name telegram-bot-api-file-streaming \
   --restart unless-stopped \
   -p 8081:8081 \
+  # -p 8082:8082 \
   -e TELEGRAM_API_ID=<API_ID> \
   -e TELEGRAM_API_HASH=<API_HASH> \
   -e TELEGRAM_FILE_STREAMING=1 \
