@@ -5,9 +5,7 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/sunnyhmz7010/telegram-bot-api-file-streaming/releases"><img src="https://img.shields.io/github/v/release/sunnyhmz7010/telegram-bot-api-file-streaming?label=Release&color=3b82f6" alt="Release" /></a>
   <a href="https://github.com/sunnyhmz7010/telegram-bot-api-file-streaming/blob/main/LICENSE"><img src="https://img.shields.io/github/license/sunnyhmz7010/telegram-bot-api-file-streaming?color=10b981" alt="License" /></a>
-  <a href="https://github.com/sunnyhmz7010/telegram-bot-api-file-streaming/actions/workflows/docker.yml"><img src="https://img.shields.io/github/actions/workflow/status/sunnyhmz7010/telegram-bot-api-file-streaming/docker.yml?branch=main&label=Docker" alt="Docker" /></a>
 </p>
 
 ---
@@ -42,15 +40,62 @@
 - BotFather 发放的 Bot Token
 - 一台 `linux/amd64` 环境或可构建 amd64 镜像的机器
 
-### 📦 安装与运行
+### 📦 Docker Compose（推荐）
+
+新建 `compose.yaml`，写入以下内容：
+
+```yaml
+services:
+  telegram-bot-api-file-streaming:
+    image: ghcr.io/sunnyhmz7010/telegram-bot-api-file-streaming:latest
+    container_name: telegram-bot-api-file-streaming
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      - TELEGRAM_API_ID=<API_ID>
+      - TELEGRAM_API_HASH=<API_HASH>
+```
+
+然后启动：
 
 ```bash
+docker compose up -d
+```
+
+查看日志：
+
+```bash
+docker compose logs -f
+```
+
+### 🖥️ 命令行方式
+
+```bash
+docker run -d \
+  --name telegram-bot-api-file-streaming \
+  --restart unless-stopped \
+  -p 8081:8081 \
+  -e TELEGRAM_API_ID=<API_ID> \
+  -e TELEGRAM_API_HASH=<API_HASH> \
+  ghcr.io/sunnyhmz7010/telegram-bot-api-file-streaming:latest
+```
+
+### 🛠️ 自行构建镜像
+
+如果想自己构建而不是使用预构建镜像：
+
+```bash
+git clone https://github.com/sunnyhmz7010/telegram-bot-api-file-streaming.git
+cd telegram-bot-api-file-streaming
 docker build -t telegram-bot-api-file-streaming .
 docker run --rm -p 8081:8081 \
   -e TELEGRAM_API_ID=<API_ID> \
   -e TELEGRAM_API_HASH=<API_HASH> \
   telegram-bot-api-file-streaming
 ```
+
+如果用 Docker Compose，把 `compose.yaml` 里的 `image: ghcr.io/...` 换成 `build: .`，然后 `docker compose up -d --build`。
 
 首次源码编译耗时较长，普通环境可能需要 30 分钟以上。GitHub Actions 已配置为手动触发构建，避免无意义地占用 CI 时间。
 
