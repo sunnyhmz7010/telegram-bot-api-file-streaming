@@ -30,7 +30,6 @@
 - 默认关闭，通过 `--enable-file-streaming` 显式启用。
 - 不修改标准 Bot API 接口行为，理论上兼容官方已有接口。
 - Docker 镜像通过 `TELEGRAM_FILE_STREAMING=1` 环境变量启用文件流式端点并监听 `8081`。
-- GitHub Actions 仅手动触发，且只构建 `linux/amd64` 镜像。
 
 ## ⚡ 快速开始
 
