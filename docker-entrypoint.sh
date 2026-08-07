@@ -78,6 +78,7 @@ check_required_env "TELEGRAM_API_ID"
 check_required_env "TELEGRAM_API_HASH"
 
 append_arg_from_env "TELEGRAM_HTTP_PORT" "--http-port" "8081"
+append_flag_from_env "TELEGRAM_STAT" "--http-stat-port=8082"
 append_arg_from_env "TELEGRAM_LOG_FILE" "--log"
 append_arg_from_env "TELEGRAM_FILTER" "--filter"
 append_arg_from_env "TELEGRAM_MAX_WEBHOOK_CONNECTIONS" "--max-webhook-connections"

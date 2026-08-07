@@ -126,6 +126,7 @@ docker run -d \
 | `TELEGRAM_WORK_DIR` | 否 | `/var/lib/telegram-bot-api` | 工作目录，建议挂载卷持久化 |
 | `TELEGRAM_TEMP_DIR` | 否 | `/tmp/telegram-bot-api` | 临时目录 |
 | `TELEGRAM_HTTP_PORT` | 否 | `8081` | HTTP 监听端口 |
+| `TELEGRAM_STAT` | 否 | 关闭 | 设为 `1` 启用统计端点（监听 `8082`） |
 | `TELEGRAM_FILE_STREAMING` | 否 | 关闭 | 设为 `1` 启用流式文件端点 |
 | `TELEGRAM_FILE_STREAM_CHUNK_SIZE` | 否 | `262144` | 单次读取和发送的最大字节数 |
 | `TELEGRAM_FILE_STREAM_MAX_CONNECTIONS` | 否 | `100` | 全局同时活动的流式响应数量上限 |
@@ -141,6 +142,8 @@ docker run -d \
 | `TELEGRAM_HTTP_IP_ADDRESS` | 否 | - | HTTP 监听地址，IPv6 使用 `[::]` |
 
 `_FILE` 变体用于从 Docker Secret 等文件读取敏感值，如 `TELEGRAM_API_ID_FILE=/run/secrets/api_id`。
+
+启用统计端点时同步映射端口 `-p 8082:8082`，然后访问 `http://<HOST>:8082` 查看服务统计。
 
 ### ✨ 功能说明
 
