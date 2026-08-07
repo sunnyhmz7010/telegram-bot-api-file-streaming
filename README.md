@@ -1,7 +1,8 @@
 <div align="center">
   <!-- <img src="assets/logo.png" alt="telegram-bot-api-file-streaming Logo" width="120" /> -->
   <h1>telegram-bot-api-file-streaming</h1>
-  <p>为 Telegram Bot API 增加大文件实时流式传输能力。</p>
+  <p>为 Telegram Bot API 增加大文件实时流式传输能力</p>
+  <p>本项目完全参考自 <a href="https://github.com/lappland22233/tgtc/tree/beta">tgtc</a> 作者的开源仓库及其在 <a href="https://www.nodeseek.com/post-840065-1">NodeSeek</a> 发布的帖子</p>
 </div>
 
 <p align="center">
