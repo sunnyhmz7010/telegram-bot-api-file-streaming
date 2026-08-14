@@ -73,11 +73,13 @@ set(TELEGRAM_BOT_API_SOURCE
   server/Stats.cpp
   server/Watchdog.cpp
   server/WebhookActor.cpp
+  server/WorkdirCleanupManager.cpp
 
   server/Client.h
   server/ClientManager.h
   server/ClientParameters.h
   server/FileStream.h
+  server/FileStreamCore.h
   server/HttpConnection.h
   server/HttpServer.h
   server/HttpStatConnection.h
@@ -85,6 +87,7 @@ set(TELEGRAM_BOT_API_SOURCE
   server/Stats.h
   server/Watchdog.h
   server/WebhookActor.h
+  server/WorkdirCleanupManager.h
 )
 
 add_executable(telegram-bot-api ${TELEGRAM_BOT_API_SOURCE})
@@ -94,14 +97,34 @@ target_link_libraries(telegram-bot-api PRIVATE memprof tdactor tdcore tddb tdnet
 include(CTest)
 if (BUILD_TESTING)
   add_executable(test-file-stream
-    td/test/main.cpp
+    server/TestMain.cpp
     server/FileStreamCursor.cpp
     server/FileStreamRoute.cpp
     server/FileStream.test.cpp
   )
-  target_include_directories(test-file-stream PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
-  target_link_libraries(test-file-stream PRIVATE tdnet tdutils)
+  target_include_directories(test-file-stream PRIVATE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/td/tdactor>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/td/tdnet>
+  )
+  target_link_libraries(test-file-stream PRIVATE tdutils)
+
+  add_executable(test-workdir-cleanup
+    server/TestMain.cpp
+    server/WorkdirCleanupManager.cpp
+    server/WorkdirCleanupManager.test.cpp
+  )
+  target_include_directories(test-workdir-cleanup PRIVATE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/td/tdactor>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/td/tddb>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/td/tdnet>
+  )
+  target_compile_definitions(test-workdir-cleanup PRIVATE WORKDIR_CLEANUP_CORE_ONLY=1)
+  target_link_libraries(test-workdir-cleanup PRIVATE tdutils)
+
   add_test(NAME test-file-stream COMMAND test-file-stream --filter FileStream)
+  add_test(NAME test-workdir-cleanup COMMAND test-workdir-cleanup --filter WorkdirCleanup)
 endif()
 
 install(TARGETS telegram-bot-api RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
