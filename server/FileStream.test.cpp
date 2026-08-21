@@ -88,7 +88,7 @@ TEST(FileStream, ParsesSingleByteRange) {
 
 TEST(FileStream, RejectsInvalidByteRanges) {
   for (auto value : {"bytes=100-100", "bytes=20-10", "bytes=-0", "bytes=0-1,2-3", "items=0-1", "bytes=abc-1"}) {
-    auto result = telegram_bot_api::parse_file_stream_range(value, 100);
+    auto result = telegram_bot_api::parse_file_stream_range(td::Slice(value), 100);
     ASSERT_TRUE(result.is_error());
     ASSERT_EQ(416, result.error().code());
   }
