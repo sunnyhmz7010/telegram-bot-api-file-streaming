@@ -81,6 +81,7 @@ class FileStreamConnection final : public td::Actor {
   bool download_completed_ = false;
   bool first_byte_sent_ = false;
   bool completed_ok_ = false;
+  bool partial_response_ = false;
   td::int64 pending_write_offset_ = -1;
   td::int64 pending_write_size_ = 0;
   bool finished_ = false;

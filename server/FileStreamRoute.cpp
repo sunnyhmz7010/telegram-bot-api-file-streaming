@@ -209,6 +209,56 @@ bool parse_file_stream_no_cache(td::Slice value) {
   return value == "1" || td::to_lower(value) == "true";
 }
 
+td::Result<FileStreamRange> parse_file_stream_range(td::Slice value, td::int64 total_size) {
+  if (total_size < 0) {
+    return td::Status::Error(416, "Range Not Satisfiable");
+  }
+  value = td::trim(value);
+  if (value.empty()) {
+    return FileStreamRange{false, 0, total_size - 1};
+  }
+  if (!td::begins_with(value, "bytes=")) {
+    return td::Status::Error(416, "Range Not Satisfiable");
+  }
+  value.remove_prefix(6);
+  if (value.empty() || value.find(',') != td::Slice::npos) {
+    return td::Status::Error(416, "Range Not Satisfiable");
+  }
+
+  auto dash_pos = value.find('-');
+  if (dash_pos == td::Slice::npos) {
+    return td::Status::Error(416, "Range Not Satisfiable");
+  }
+  auto start_value = td::trim(value.substr(0, dash_pos));
+  auto end_value = td::trim(value.substr(dash_pos + 1));
+  if (start_value.empty() && end_value.empty()) {
+    return td::Status::Error(416, "Range Not Satisfiable");
+  }
+
+  if (start_value.empty()) {
+    auto suffix_size = td::to_integer_safe<td::int64>(end_value);
+    if (suffix_size.is_error() || suffix_size.ok() <= 0 || total_size == 0) {
+      return td::Status::Error(416, "Range Not Satisfiable");
+    }
+    auto length = td::min(suffix_size.ok(), total_size);
+    return FileStreamRange{true, total_size - length, total_size - 1};
+  }
+
+  auto start = td::to_integer_safe<td::int64>(start_value);
+  if (start.is_error() || start.ok() < 0 || start.ok() >= total_size) {
+    return td::Status::Error(416, "Range Not Satisfiable");
+  }
+  td::int64 end = total_size - 1;
+  if (!end_value.empty()) {
+    auto parsed_end = td::to_integer_safe<td::int64>(end_value);
+    if (parsed_end.is_error() || parsed_end.ok() < start.ok()) {
+      return td::Status::Error(416, "Range Not Satisfiable");
+    }
+    end = td::min(parsed_end.ok(), total_size - 1);
+  }
+  return FileStreamRange{true, start.ok(), end};
+}
+
 td::Result<td::int64> resolve_file_stream_size(td::int64 tdlib_size, td::int64 expected_size) {
   (void)expected_size;
   if (tdlib_size > 0) {

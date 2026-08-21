@@ -723,9 +723,11 @@ Status HttpReader::parse_head(MutableSlice head) {
 
   Slice type = parser.read_till(' ');
   parser.skip(' ');
-  // GET POST HTTP/1.1
+  // GET HEAD POST HTTP/1.1
   if (type == "GET") {
     query_->type_ = HttpQuery::Type::Get;
+  } else if (type == "HEAD") {
+    query_->type_ = HttpQuery::Type::Head;
   } else if (type == "POST") {
     query_->type_ = HttpQuery::Type::Post;
   } else if (type.size() >= 4 && type.substr(0, 4) == "HTTP") {

@@ -54,6 +54,9 @@ StringBuilder &operator<<(StringBuilder &sb, const HttpQuery &q) {
     case HttpQuery::Type::Get:
       sb << "GET";
       break;
+    case HttpQuery::Type::Head:
+      sb << "HEAD";
+      break;
     case HttpQuery::Type::Post:
       sb << "POST";
       break;

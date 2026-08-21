@@ -78,12 +78,19 @@ void FileStreamConnection::on_file_ready(td::int32 file_id, td::int64 total_size
   if (config_.max_size > 0 && total_size > config_.max_size) {
     return fail(413, "File is too large for the streaming endpoint");
   }
+  cursor_.total_size = total_size;
+  auto range = parse_file_stream_range(route_.range, total_size);
+  if (range.is_error()) {
+    return fail(416, "Range Not Satisfiable");
+  }
+  auto parsed_range = range.move_as_ok();
+  partial_response_ = parsed_range.is_partial;
   // G16-02: the first-byte timeout was started when the request arrived, which also covered
   // TDLib initialization and remote-file resolution. Now that the download is confirmed started,
   // restart the first-byte clock so a cold/remote file whose resolution exceeds the timeout is
   // not aborted before the first chunk is produced.
   set_timeout_in(config_.first_byte_timeout);
-  cursor_.total_size = total_size;
+  cursor_.set_range(parsed_range.start, parsed_range.end);
   auto status = cursor_.update_progress(download_offset, downloaded_prefix_size, is_completed);
   if (status.is_error()) {
     return fail(502, status.public_message());
@@ -94,6 +101,9 @@ void FileStreamConnection::on_file_ready(td::int32 file_id, td::int64 total_size
     return fail(502, "Telegram download completed with an incomplete file");
   }
   send_headers();
+  if (route_.head_only) {
+    return;
+  }
   try_read();
 }
 
@@ -244,6 +254,15 @@ void FileStreamConnection::on_headers_flushed(td::Result<td::Unit> result) {
     // so abort (and thereby cancel the TDLib download) instead of leaving a zombie stream.
     return abort(result.move_as_error());
   }
+  if (route_.head_only) {
+    finished_ = true;
+    cancel_timeout();
+    if (!connection_.empty()) {
+      send_closure(std::move(connection_), &td::HttpInboundConnection::write_ok);
+    }
+    stop();
+    return;
+  }
   // Headers reached the socket; normal streaming continues from try_read().
 }
 
@@ -252,10 +271,18 @@ void FileStreamConnection::send_headers() {
     return;
   }
   td::HttpHeaderCreator hc;
-  hc.init_status_line(200);
+  auto content_start = cursor_.start_offset;
+  auto content_end = cursor_.end_offset;
+  auto content_size = cursor_.total_size == 0 ? 0 : content_end - content_start + 1;
+  hc.init_status_line(partial_response_ ? 206 : 200);
   hc.set_keep_alive();
   hc.set_content_type("application/octet-stream");
-  hc.set_content_size(static_cast<std::size_t>(cursor_.total_size));
+  hc.set_content_size(static_cast<std::size_t>(content_size));
+  hc.add_header("Accept-Ranges", "bytes");
+  if (partial_response_) {
+    hc.add_header("Content-Range",
+                  PSLICE() << "bytes " << content_start << '-' << content_end << '/' << cursor_.total_size);
+  }
   hc.add_header("Content-Disposition", "attachment");
   hc.add_header("Cache-Control", "private");
   auto header = hc.finish();
@@ -317,6 +344,9 @@ void FileStreamConnection::fail(int http_status_code, td::Slice message) {
   td::HttpHeaderCreator hc;
   hc.init_status_line(http_status_code);
   hc.set_content_type("application/json");
+  if (http_status_code == 416 && cursor_.total_size >= 0) {
+    hc.add_header("Content-Range", PSLICE() << "bytes */" << cursor_.total_size);
+  }
   hc.set_content_size(content.size());
   auto header = hc.finish();
   finished_ = true;
@@ -325,7 +355,9 @@ void FileStreamConnection::fail(int http_status_code, td::Slice message) {
     send_closure(std::move(connection_), &td::HttpInboundConnection::write_error, header.move_as_error());
   } else {
     send_closure(connection_, &td::HttpInboundConnection::write_next_noflush, td::BufferSlice(header.ok()));
-    send_closure(connection_, &td::HttpInboundConnection::write_next_noflush, std::move(content));
+    if (!route_.head_only) {
+      send_closure(connection_, &td::HttpInboundConnection::write_next_noflush, std::move(content));
+    }
     send_closure(std::move(connection_), &td::HttpInboundConnection::write_ok);
   }
   stop();

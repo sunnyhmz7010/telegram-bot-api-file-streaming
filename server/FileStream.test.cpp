@@ -54,6 +54,46 @@ TEST(FileStream, NoCacheHeader) {
   ASSERT_FALSE(telegram_bot_api::parse_file_stream_no_cache("yes"));
 }
 
+TEST(FileStream, ParsesSingleByteRange) {
+  auto range = telegram_bot_api::parse_file_stream_range("", 100).move_as_ok();
+  ASSERT_FALSE(range.is_partial);
+  ASSERT_EQ(0, range.start);
+  ASSERT_EQ(99, range.end);
+
+  range = telegram_bot_api::parse_file_stream_range("bytes=10-19", 100).move_as_ok();
+  ASSERT_TRUE(range.is_partial);
+  ASSERT_EQ(10, range.start);
+  ASSERT_EQ(19, range.end);
+
+  range = telegram_bot_api::parse_file_stream_range("bytes=10-", 100).move_as_ok();
+  ASSERT_TRUE(range.is_partial);
+  ASSERT_EQ(10, range.start);
+  ASSERT_EQ(99, range.end);
+
+  range = telegram_bot_api::parse_file_stream_range("bytes=0-", 100).move_as_ok();
+  ASSERT_TRUE(range.is_partial);
+  ASSERT_EQ(0, range.start);
+  ASSERT_EQ(99, range.end);
+
+  range = telegram_bot_api::parse_file_stream_range("bytes=99-1000", 100).move_as_ok();
+  ASSERT_TRUE(range.is_partial);
+  ASSERT_EQ(99, range.start);
+  ASSERT_EQ(99, range.end);
+
+  range = telegram_bot_api::parse_file_stream_range("bytes=-10", 100).move_as_ok();
+  ASSERT_TRUE(range.is_partial);
+  ASSERT_EQ(90, range.start);
+  ASSERT_EQ(99, range.end);
+}
+
+TEST(FileStream, RejectsInvalidByteRanges) {
+  for (auto value : {"bytes=100-100", "bytes=20-10", "bytes=-0", "bytes=0-1,2-3", "items=0-1", "bytes=abc-1"}) {
+    auto result = telegram_bot_api::parse_file_stream_range(value, 100);
+    ASSERT_TRUE(result.is_error());
+    ASSERT_EQ(416, result.error().code());
+  }
+}
+
 TEST(FileStream, ResolvesExactSize) {
   ASSERT_EQ(10, telegram_bot_api::resolve_file_stream_size(10, -1).move_as_ok());
   ASSERT_EQ(10, telegram_bot_api::resolve_file_stream_size(10, 10).move_as_ok());
@@ -77,6 +117,21 @@ TEST(FileStream, CursorCompleteFile) {
   ASSERT_TRUE(cursor.commit(7, 3).is_ok());
   ASSERT_TRUE(cursor.is_complete());
   ASSERT_EQ(10, cursor.next_offset);
+}
+
+TEST(FileStream, CursorStreamsSelectedRangeOnly) {
+  telegram_bot_api::FileStreamCursor cursor;
+  cursor.total_size = 100;
+  cursor.set_range(10, 19);
+  ASSERT_TRUE(cursor.update_progress(0, 100, true).is_ok());
+  ASSERT_EQ(4, cursor.next_read_size(4));
+  ASSERT_TRUE(cursor.commit(10, 4).is_ok());
+  ASSERT_EQ(4, cursor.next_read_size(4));
+  ASSERT_TRUE(cursor.commit(14, 4).is_ok());
+  ASSERT_EQ(2, cursor.next_read_size(4));
+  ASSERT_TRUE(cursor.commit(18, 2).is_ok());
+  ASSERT_TRUE(cursor.is_complete());
+  ASSERT_EQ(20, cursor.next_offset);
 }
 
 TEST(FileStream, CursorRejectsGapsAndDuplicates) {

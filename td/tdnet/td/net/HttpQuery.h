@@ -20,7 +20,7 @@ namespace td {
 
 class HttpQuery {
  public:
-  enum class Type : int8 { Empty, Get, Post, Response };
+  enum class Type : int8 { Empty, Get, Head, Post, Response };
 
   vector<BufferSlice> container_;
   Type type_ = Type::Empty;

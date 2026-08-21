@@ -152,9 +152,9 @@ docker run -d \
 - 默认关闭，必须通过启动参数显式启用。
 - 不修改标准 Bot API `getFile` 方法的行为。
 - 接口正常结束时保证响应体字节数等于文件精确大小。
-- 文件始终从偏移量 `0` 开始顺序输出，不重复、不跳字节。
+- 完整下载从偏移量 `0` 开始顺序输出；携带合法单区间 `Range` 时从请求的字节偏移开始输出。
 - 同一文件的多个调用方共享 TDLib 下载任务，但各自维护独立的输出进度。
-- 当前版本仅支持完整文件 `GET`，不支持 `Range`、断点续传、`HEAD` 或多区间请求。
+- 支持完整文件 `GET`、单区间 `Range` 断点续传和 `HEAD`；暂不支持多区间 `multipart/byteranges`。
 
 ### 🚀 启动服务
 
@@ -199,7 +199,7 @@ docker run -d \
 | 参数 | 默认值 | 说明 |
 | --- | ---: | --- |
 | `--enable-file-streaming` | 关闭 | 启用流式文件端点。 |
-| `--file-stream-chunk-size` | `262144` | 单次读取和发送的最大字节数，允许范围为 16 KiB～4 MiB。 |
+| `--file-stream-chunk-size` | `262144` | 单次读取和发送的最大字节数，允许范围为 16 KiB～1 MiB。 |
 | `--file-stream-max-connections` | `100` | 全局同时活动的流式响应数量上限。 |
 | `--file-stream-first-byte-timeout` | `30` | 首个数据块发送前的最长等待时间，单位为秒。 |
 | `--file-stream-idle-timeout` | `60` | 已开始传输后，两个数据块之间允许的最长停滞时间，单位为秒。 |
@@ -238,6 +238,7 @@ docker run -d \
 
 ```text
 GET /stream/file/bot<BOT_TOKEN>/<URL_ENCODED_FILE_ID>
+HEAD /stream/file/bot<BOT_TOKEN>/<URL_ENCODED_FILE_ID>
 ```
 
 完整 URL：
@@ -261,6 +262,7 @@ GET /stream/file/bot<BOT_TOKEN>/test/<URL_ENCODED_FILE_ID>
 | `BOT_TOKEN` | BotFather 发放的完整 Bot Token，例如 `123456789:AA...`。 |
 | `URL_ENCODED_FILE_ID` | 对完整 `file_id` 做 URL 路径段编码后的结果。 |
 | `X-Telegram-File-Size` | 可选请求头，十进制正整数，单位为字节。全新 TDLib 工作目录下载历史文件时，应由可信业务后端从上传记录中提供。 |
+| `Range` | 可选请求头，仅支持单区间 `bytes=start-end`、`bytes=start-` 或 `bytes=-suffix`。合法 Range 返回 `206 Partial Content`，多区间请求暂不支持。 |
 
 必须对 `file_id` 进行 URL 编码，尤其不要直接拼接包含 `/`、`+`、`=`、`%` 等特殊字符的值。
 
@@ -386,9 +388,20 @@ python -m pip install requests
 HTTP/1.1 200 OK
 Content-Type: application/octet-stream
 Content-Length: <文件精确字节数>
+Accept-Ranges: bytes
 ```
 
-响应体是完整文件的原始二进制内容，不是 JSON，也没有 Bot API 的 `ok` 包装字段。
+携带合法单区间 `Range` 时返回：
+
+```http
+HTTP/1.1 206 Partial Content
+Content-Type: application/octet-stream
+Content-Length: <区间字节数>
+Accept-Ranges: bytes
+Content-Range: bytes <start>-<end>/<文件精确字节数>
+```
+
+`HEAD` 请求只返回响应头，不发送响应体。普通 `GET` 的响应体是完整文件或所请求区间的原始二进制内容，不是 JSON，也没有 Bot API 的 `ok` 包装字段。
 
 服务端只有在实际发送的字节数严格等于 `Content-Length` 时才会正常结束响应。
 
@@ -446,8 +459,9 @@ Get-FileHash ".\download.bin" -Algorithm SHA256
 | `400` | 路径、URL 编码或 `file_id` 不合法。 | 修正参数，不要直接重试同一请求。 |
 | `401` | Bot Token 无效或认证失败。 | 检查 Token 和调用环境。 |
 | `404` | 路由未启用、文件不可用或无法解析。 | 检查启动参数、`file_id` 和数据中心。 |
-| `405` | 使用了非 `GET` 方法。 | 改为 `GET`。 |
+| `405` | 使用了流式端点不支持的 HTTP 方法。 | 改为 `GET` 或 `HEAD`。 |
 | `413` | 文件大小超出当前平台可处理范围。 | 更换平台或限制文件大小。 |
+| `416` | `Range` 请求头格式非法、超出文件大小或使用了暂不支持的多区间请求。 | 重新请求完整文件，或修正为合法单区间。 |
 | `429` | 活动流数量超过配置上限。 | 指数退避后重试。 |
 | `502` | TDLib 或 Telegram 上游下载失败。 | 短暂退避后重试；持续失败时检查文件是否仍可访问。 |
 | `503` | Bot API Client 正在关闭。 | 服务恢复后重试。 |
@@ -463,9 +477,9 @@ Get-FileHash ".\download.bin" -Algorithm SHA256
 2. 第二次失败后等待 2 秒；
 3. 第三次失败后等待 4 秒；
 4. 加入少量随机抖动；
-5. 每次重试都重新从完整文件起点下载。
+5. 如果已持久化部分文件，可使用合法单区间 `Range` 从已校验的字节偏移继续下载；否则重新从完整文件起点下载。
 
-当前版本不支持断点续传，因此重试时不能携带 `Range` 请求头。
+断点续传只支持单区间请求；不要发送多区间 `Range`。
 
 ### 🚪 反向代理注意事项
 
@@ -560,7 +574,7 @@ Telegram 服务器
 
 该实现不会调用 `readFilePart`，也不会把 HTTP 分块转换成高频 Telegram DC 分片请求。多个 HTTP 消费者请求同一文件时，可以共享同一次 TDLib 下载任务。
 
-当前版本只支持完整顺序 `GET` 响应，不支持 `Range`、断点续传、`HEAD` 或多区间响应。调用方必须校验 `Content-Length` 与实际接收字节数，连接提前关闭时应丢弃临时文件并重试。
+当前版本支持完整顺序 `GET`、单区间 `Range` 断点续传和 `HEAD`，不支持多区间响应。调用方必须校验 `Content-Length` 与实际接收字节数，连接提前关闭时应丢弃未校验的临时文件，或从已校验的偏移量发起单区间续传。
 
 ## 🧱 技术栈
 

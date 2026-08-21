@@ -41,6 +41,7 @@ class HttpConnection final : public td::HttpInboundConnection::Callback {
   td::ActorOwn<td::HttpInboundConnection> connection_;
   std::shared_ptr<SharedData> shared_data_;
   FileStreamConfig file_stream_config_;
+  bool head_response_ = false;
 
   void hangup() final {
     connection_.release();

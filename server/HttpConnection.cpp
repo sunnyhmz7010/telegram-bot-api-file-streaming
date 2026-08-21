@@ -24,6 +24,7 @@ void HttpConnection::handle(td::unique_ptr<td::HttpQuery> http_query,
                             td::ActorOwn<td::HttpInboundConnection> connection) {
   CHECK(connection_.empty());
   connection_ = std::move(connection);
+  head_response_ = http_query->type_ == td::HttpQuery::Type::Head;
 
   const bool is_file_stream_request = td::begins_with(http_query->url_path_, "/stream/file/bot");
   if (is_file_stream_request) {
@@ -44,8 +45,8 @@ void HttpConnection::handle(td::unique_ptr<td::HttpQuery> http_query,
     if (!file_stream_config_.enabled) {
       return send_http_error(404, "Not Found");
     }
-    if (http_query->type_ != td::HttpQuery::Type::Get) {
-      return send_http_error(405, "Method Not Allowed: file streaming requires GET", "GET");
+    if (http_query->type_ != td::HttpQuery::Type::Get && http_query->type_ != td::HttpQuery::Type::Head) {
+      return send_http_error(405, "Method Not Allowed: file streaming requires GET or HEAD", "GET, HEAD");
     }
     auto route = parse_file_stream_route(http_query->url_path_);
     if (route.is_error()) {
@@ -66,11 +67,17 @@ void HttpConnection::handle(td::unique_ptr<td::HttpQuery> http_query,
     auto parsed_route = route.move_as_ok();
     parsed_route.expected_size = expected_size.move_as_ok();
     parsed_route.no_cache = parse_file_stream_no_cache(http_query->get_header("x-telegram-no-cache"));
+    parsed_route.range = http_query->get_header("range").str();
+    parsed_route.head_only = http_query->type_ == td::HttpQuery::Type::Head;
     td::create_actor<FileStreamConnection>("FileStreamConnection", std::move(connection_), client_manager_,
                                            shared_data_->workdir_cleanup_manager_, std::move(parsed_route),
                                            file_stream_config_, http_query->peer_address_)
         .release();
     return;
+  }
+
+  if (http_query->type_ == td::HttpQuery::Type::Head) {
+    return send_http_error(405, "Method Not Allowed: HEAD is only supported for file streaming", "GET, POST");
   }
 
   if (!url_path_parser.try_skip("/bot")) {
@@ -129,7 +136,9 @@ void HttpConnection::send_response(int http_status_code, td::BufferSlice &&conte
   LOG(DEBUG) << "Send result: " << content;
 
   send_closure(connection_, &td::HttpInboundConnection::write_next_noflush, td::BufferSlice(r_header.ok()));
-  send_closure(connection_, &td::HttpInboundConnection::write_next_noflush, std::move(content));
+  if (!head_response_) {
+    send_closure(connection_, &td::HttpInboundConnection::write_next_noflush, std::move(content));
+  }
   send_closure(std::move(connection_), &td::HttpInboundConnection::write_ok);
 }
 
