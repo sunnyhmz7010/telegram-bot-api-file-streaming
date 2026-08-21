@@ -2,7 +2,7 @@
   <!-- <img src="assets/logo.png" alt="telegram-bot-api-file-streaming Logo" width="120" /> -->
   <h1>telegram-bot-api-file-streaming</h1>
   <p>为 Telegram Bot API 增加大文件实时流式传输能力</p>
-  <p>本项目完全参考自 <a href="https://github.com/lappland22233/tgtc/tree/beta">tgtc</a> 作者的开源仓库及其在 <a href="https://www.nodeseek.com/post-840065-1">NodeSeek</a> 发布的帖子</p>
+  <p>本项目参考自 <a href="https://github.com/lappland22233/tgtc/tree/beta">tgtc</a> 作者的开源仓库及其在 <a href="https://www.nodeseek.com/post-840065-1">NodeSeek</a> 发布的帖子</p>
 </div>
 
 <p align="center">
@@ -26,6 +26,10 @@
 - 新增 `/stream/file/bot<TOKEN>/<FILE_ID>` 流式文件下载端点。
 - 使用 Telegram Bot API 对象中的 `file_id`，不要求先获取 `file_path`。
 - 支持边下载边转发，降低大文件首字节等待时间。
+- 支持单区间 `Range` 请求，合法范围返回 `206 Partial Content`。
+- 支持 HTTP `HEAD` 探测文件大小、`Accept-Ranges` 和 `Content-Range`。
+- 支持基于已校验字节偏移的断点续传，连接中断后可从指定偏移继续下载。
+- 暂不支持多区间 `multipart/byteranges`，多区间请求会按不满足范围处理。
 - 减少“完整下载完成后再返回”的阻塞流程和额外磁盘占用。
 - 默认关闭，通过 `--enable-file-streaming` 显式启用。
 - 不修改标准 Bot API 接口行为，理论上兼容官方已有接口。
@@ -268,6 +272,19 @@ GET /stream/file/bot<BOT_TOKEN>/test/<URL_ENCODED_FILE_ID>
 
 大小选择规则：TDLib 已知大小时使用并核对 TDLib 值；TDLib 未知时使用 `X-Telegram-File-Size`；两者不一致返回 `502`；两者都未知也返回 `502 Exact file size is unavailable`。不要让浏览器或公网调用方自由声明大小，端点应仅供业务后端通过内网访问。
 
+断点续传示例请求：
+
+```http
+GET /stream/file/bot<BOT_TOKEN>/<URL_ENCODED_FILE_ID> HTTP/1.1
+Range: bytes=1048576-
+```
+
+文件大小探测示例请求：
+
+```http
+HEAD /stream/file/bot<BOT_TOKEN>/<URL_ENCODED_FILE_ID> HTTP/1.1
+```
+
 Telegram 风控兼容机制：
 
 每个文件只启动一次 TDLib 标准整文件下载：`downloadFile(file_id, 1, 0, 0, false)`。HTTP 流根据 `updateFile` 的连续可读前缀，从 TDLib 本地缓存文件使用本地 `pread` 分块输出；**不会调用 `readFilePart`，也不会把每个 HTTP 分块转换成额外的 MTProto `upload.getFile` 请求**。同一文件的并发 HTTP 消费者共享这一次下载，从而保持流式首字节和背压能力，同时避免非官方式高频 DC 分片访问触发服务端风控或重置连接。
@@ -289,6 +306,24 @@ curl.exe --fail --location --output ".\download.bin" $url
 ```
 
 建议使用系统自带的 `curl.exe`，避免 Windows PowerShell 将 `curl` 解析为 `Invoke-WebRequest` 别名。
+
+PowerShell 断点续传：
+
+```powershell
+$baseUrl = "http://127.0.0.1:8081"
+$botToken = "<BOT_TOKEN>"
+$fileId = "<FILE_ID>"
+$encodedFileId = [System.Uri]::EscapeDataString($fileId)
+$url = "$baseUrl/stream/file/bot$botToken/$encodedFileId"
+
+curl.exe --fail --location --continue-at - --output ".\download.bin" $url
+```
+
+显式指定续传偏移：
+
+```powershell
+curl.exe --fail --location --header "Range: bytes=1048576-" --output ".\download.part" $url
+```
 
 PowerShell 使用 `Invoke-WebRequest`：
 
@@ -382,7 +417,7 @@ python -m pip install requests
 
 ### ✅ 成功响应
 
-成功请求返回：
+完整 `GET` 成功时返回：
 
 ```http
 HTTP/1.1 200 OK
@@ -402,6 +437,14 @@ Content-Range: bytes <start>-<end>/<文件精确字节数>
 ```
 
 `HEAD` 请求只返回响应头，不发送响应体。普通 `GET` 的响应体是完整文件或所请求区间的原始二进制内容，不是 JSON，也没有 Bot API 的 `ok` 包装字段。
+
+非法、越界或多区间 `Range` 返回：
+
+```http
+HTTP/1.1 416 Range Not Satisfiable
+Content-Range: bytes */<文件精确字节数>
+Content-Type: application/json
+```
 
 服务端只有在实际发送的字节数严格等于 `Content-Length` 时才会正常结束响应。
 
@@ -572,7 +615,9 @@ Telegram 服务器
 
 流式端点会为单个文件启动一次 TDLib 标准整文件下载：`downloadFile(file_id, 1, 0, 0, false)`。HTTP 响应读取 TDLib 本地缓存中已经连续可用的前缀数据，并按顺序输出给下游客户端。
 
-该实现不会调用 `readFilePart`，也不会把 HTTP 分块转换成高频 Telegram DC 分片请求。多个 HTTP 消费者请求同一文件时，可以共享同一次 TDLib 下载任务。
+该实现不会调用 `readFilePart`，也不会把 HTTP 分块或 HTTP `Range` 转换成高频 Telegram DC 分片请求。多个 HTTP 消费者请求同一文件时，可以共享同一次 TDLib 下载任务。
+
+断点续传发生在 HTTP 输出层：服务端仍复用 TDLib 的本地缓存文件，按照 `Range` 指定的起始偏移使用本地 `pread` 输出对应字节范围。这样可以让下载器从已校验的偏移量继续接收数据，同时避免把客户端 Range 请求放大成 Telegram 上游的分片拉取压力。
 
 当前版本支持完整顺序 `GET`、单区间 `Range` 断点续传和 `HEAD`，不支持多区间响应。调用方必须校验 `Content-Length` 与实际接收字节数，连接提前关闭时应丢弃未校验的临时文件，或从已校验的偏移量发起单区间续传。
 
