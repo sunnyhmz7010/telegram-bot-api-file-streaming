@@ -36,39 +36,42 @@
   - `README.md`
   - `SECURITY.md`
   - `LICENSE`
-- `td/` 目录在 2026-08-14 检查时与上游 tree 一致。后续同步时如果上游 `td/` 变更，再单独判断是否同步。
+- `td/` 目录已同步上游本次涉及的 binlog 与 HTTP 连接底层修复。后续同步时如果上游 `td/` 继续变更，再单独判断是否同步。
 
 ## 本次同步记录
 
-检查日期：2026-08-14
+检查日期：2026-08-21
 
 已同步到的上游提交：
 
-- `077c7bd9ee80a7c3c33185354c6dfd76918b843c`
-- 提交信息：`feat(telegram-bot-api): 添加工作目录清理管理器`
-- 上游链接：`https://github.com/lappland22233/tgtc/commit/077c7bd9ee80a7c3c33185354c6dfd76918b843c`
+- `458690bfb4ce7722d78baf076809544d643f9f5d`
+- 提交信息：`修复td::CSlice(text.data(), text.size()) 参数类型错误；`
+- 上游链接：`https://github.com/lappland22233/tgtc/commit/458690bfb4ce7722d78baf076809544d643f9f5d`
 
-本次同步涉及的上游后续提交包括：
+本次同步从 `077c7bd9ee80a7c3c33185354c6dfd76918b843c` 更新至 `458690bfb4ce7722d78baf076809544d643f9f5d`，涉及的上游提交包括：
 
-- `859b7c676f4af449a66c96c82507f4e0efb35f8d`：无缓存模式支持文件实时回源直通。
-- `8144efbae49d929303809f4f34fa7cdf0baf4c21`：添加环境变量配置，并新增 `FileStreamCore.h`、`TestMain.cpp`、`WorkdirCleanupManager.*`。
-- `f511edea42f0447eacfa16e8f01a4c35f2d8b04c`：体检仅获取元数据，避免预载文件内容。
-- `077c7bd9ee80a7c3c33185354c6dfd76918b843c`：接入工作目录清理管理器构建配置。
-
-本次新增文件：
-
-- `server/FileStreamCore.h`
-- `server/TestMain.cpp`
-- `server/WorkdirCleanupManager.cpp`
-- `server/WorkdirCleanupManager.h`
-- `server/WorkdirCleanupManager.test.cpp`
+- `b52c8aa9b919fcd2183c74cbd74e00f9e5f505e4`：保护 TDLib 持久化文件，修复 binlog 重建竞态。
+- `96b77546251b33afa4ef1403ef293ad8f0ba4871`：补充文件流安全限制、超时处理与工作目录清理优化。
+- `2583cdcb7f8d8a5cdc495ed9c40171b6946bf4fd`：修复 `FileStreamRoute` 的 IPv6 参数类型和匿名命名空间问题。
+- `458690bfb4ce7722d78baf076809544d643f9f5d`：修复 `td::CSlice` 参数类型错误。
 
 本次修改范围：
 
-- `CMakeLists.txt`
-- `server/*.cpp`
-- `server/*.h`
-- `server/*.test.cpp`
+- `AGENTS.md`
+- `server/ClientManager.cpp`
+- `server/ClientManager.h`
+- `server/ClientParameters.h`
+- `server/FileStream.cpp`
+- `server/FileStream.h`
+- `server/FileStreamCore.h`
+- `server/FileStreamRoute.cpp`
+- `server/HttpConnection.cpp`
+- `server/WorkdirCleanupManager.cpp`
+- `server/WorkdirCleanupManager.test.cpp`
+- `server/telegram-bot-api.cpp`
+- `td/tddb/td/db/binlog/Binlog.cpp`
+- `td/tdnet/td/net/HttpConnectionBase.cpp`
+- `td/tdnet/td/net/HttpConnectionBase.h`
 
 ## 后续检查上游更新的推荐命令
 

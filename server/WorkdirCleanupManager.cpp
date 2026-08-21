@@ -10,6 +10,8 @@
 #endif
 
 #include "td/utils/logging.h"
+#include "td/utils/misc.h"
+#include "td/utils/PathView.h"
 #include "td/utils/port/path.h"
 #include "td/utils/port/Stat.h"
 #include "td/utils/Time.h"
@@ -21,6 +23,11 @@
 
 namespace telegram_bot_api {
 namespace {
+
+// G16-09: minimum interval between non-periodic full-workdir scans. A full walk+stat over a large
+// workdir is expensive, so the threshold re-check is throttled to this value instead of firing
+// every 60s.
+constexpr double THRESHOLD_CHECK_INTERVAL = 300.0;
 
 struct Candidate {
   td::string path;
@@ -41,6 +48,23 @@ td::int64 get_free_space(td::Slice path) {
   return static_cast<td::int64>(info.available);
 }
 
+// TDLib keeps its per-bot session, binlog and SQLite state files directly inside
+// the bot subdirectory of the workdir. These are live database/control files, not
+// media cache: removing them (POSIX permits deleting an open file) corrupts the bot
+// session and can race with binlog rotation, which aborts the service. Media cache
+// files never use these names/suffixes.
+bool is_tdlib_persistent_file(td::Slice path) {
+  auto file_name = td::PathView(path).file_name();
+  if (file_name.empty()) {
+    return false;
+  }
+  if (td::ends_with(file_name, ".binlog") || td::ends_with(file_name, ".binlog.new")) {
+    return true;
+  }
+  return td::ends_with(file_name, ".sqlite") || td::ends_with(file_name, ".sqlite-wal") ||
+         td::ends_with(file_name, ".sqlite-shm") || td::ends_with(file_name, ".sqlite-journal");
+}
+
 }  // namespace
 
 bool is_workdir_cleanup_candidate(td::Slice workdir, td::Slice path) {
@@ -56,7 +80,14 @@ bool is_workdir_cleanup_candidate(td::Slice workdir, td::Slice path) {
     return false;
   }
   auto relative = td::Slice(candidate).substr(root.size()).str();
-  return relative.find("..") == td::string::npos;
+  if (relative.find("..") != td::string::npos) {
+    return false;
+  }
+  // Never treat live TDLib session/binlog/database files as cache candidates.
+  if (is_tdlib_persistent_file(candidate)) {
+    return false;
+  }
+  return true;
 }
 
 bool delete_workdir_file_with_retries(const td::string &path, const WorkdirDeleteFunction &delete_file,
@@ -163,7 +194,11 @@ void WorkdirCleanupManager::timeout_expired() {
   if (periodic) {
     next_periodic_cleanup_ = now + config_.interval;
   }
-  next_threshold_check_ = now + td::min(60.0, config_.interval);
+  // G16-09: every full scan is a walk + stat over the whole workdir, which is expensive on large
+  // directories. The non-periodic threshold re-check no longer runs every 60s; it is throttled to
+  // THRESHOLD_CHECK_INTERVAL (5 minutes) so a large directory is scanned far less often. The
+  // periodic scan (config_.interval, default 1h) still performs the authoritative cleanup.
+  next_threshold_check_ = now + td::min(THRESHOLD_CHECK_INTERVAL, config_.interval);
   schedule_next();
 }
 
