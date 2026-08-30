@@ -1,11 +1,5 @@
 # telegram-bot-api-file-streaming 项目 AGENTS.md
 
-## 默认沟通
-
-- 默认使用简体中文沟通。
-- 先给明确判断，再说明必要依据和下一步。
-- 修改前先列计划并等待用户确认；用户回复“确认 / 执行 / ok / 1”等表示同意执行。
-
 ## 仓库来源关系
 
 - 本仓库：`sunnyhmz7010/telegram-bot-api-file-streaming`
