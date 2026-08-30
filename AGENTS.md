@@ -1,4 +1,4 @@
-# AGENTS.md
+# telegram-bot-api-file-streaming 项目 AGENTS.md
 
 ## 默认沟通
 
